@@ -20,6 +20,9 @@ def init_weights(m):
 
 
 class Actor(nn.Module):
+    """
+    This class implements the Actor Network for TD3. It is a deterministic policy network that estimates the optimal action for a given state. The input to the Actor Network is the state. The output is the action. The Actor Network has two fully connected layers with ReLU activation functions. The first layer has 256 units, and the second layer has the same number of units as the action dimension. The output is scaled by the maximum action value. The Actor Network is trained using the deterministic policy gradient (DPG) algorithm. The Actor Network is optimized using the Adam optimizer.
+    """
     def __init__(self, state_dim, action_dim, max_action, image_obs, cnn):
         super(Actor, self).__init__()
 
@@ -65,6 +68,9 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
+    """
+    This class implements the Critic Network for TD3. It is a Q-network that estimates the Q-value of the state-action pair. It has two Q-networks to reduce overestimation bias. The Q-networks share the same architecture. The input to the Q-network is the state-action pair. The output is the Q-value of the state-action pair. The Q-network has two fully connected layers with ReLU activation functions. The first layer has 256 units, and the second layer has 1 unit. The Q-network is trained using the mean squared error loss function. The Q-network is optimized using the Adam optimizer.
+    """
     def __init__(self, state_dim, action_dim, image_obs, cnn):
         super(Critic, self).__init__()
 
@@ -144,6 +150,9 @@ class Critic(nn.Module):
 
 
 class TD3(object):
+    """
+    This class implements the Twin Delayed Deep Deterministic Policy Gradients (TD3) algorithm. TD3 is an off-policy algorithm that learns a deterministic policy. It uses two Q-networks to reduce overestimation bias. It also uses target policy smoothing and target policy noise to improve stability. The actor network is trained using the deterministic policy gradient (DPG) algorithm. The critic network is trained using the mean squared error loss function. The actor and critic networks are optimized using the Adam optimizer. The target networks are updated using the soft update rule. The TD3 algorithm is implemented in the train method. The train method samples a batch of experiences from the replay buffer. It computes the target Q-value using the target Q-networks. It computes the current Q-value using the Q-networks. It computes the critic loss using the mean squared error loss function. It optimizes the critic network using the Adam optimizer. It computes the actor loss using the deterministic policy gradient algorithm. It optimizes the actor network using the Adam optimizer. It updates the target networks using the soft update rule. The select_action method selects an action using the actor network. The save method saves the actor and critic networks to a file. The load method loads the actor and critic networks from a file.
+    """
     def __init__(
             self,
             state_dim,

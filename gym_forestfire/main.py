@@ -16,7 +16,7 @@ import gym_forestfire.agents.td3 as td3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=10):
+def eval_policy(policy, env_name, seed, eval_episodes=1):
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
 
@@ -27,7 +27,9 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
             action = policy.select_action(np.array(state))
             state, reward, done, _ = eval_env.step(action)
             avg_reward += reward
+            eval_env.render()
 
+            
     avg_reward /= eval_episodes
     print("---------------------------------------")
     print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
@@ -39,12 +41,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", default="TD3", help="Policy name (TD3)")
-    parser.add_argument("--cnn", default=False, action="store_true", help="Wether to use CNN with the RL agent.")
+    parser.add_argument("--cnn", default=True, action="store_true", help="Wether to use CNN with the RL agent.")
     parser.add_argument("--env", default="gym_forestfire:ForestFire-v0", help="OpenAI gym environment name or Forest Fire environment")
     parser.add_argument("--seed", default=0, type=int, help="Sets Gym, PyTorch and Numpy seeds")
-    parser.add_argument("--start_timesteps", default=25e3, type=int, help="Time steps initial random policy is used")
-    parser.add_argument("--eval_freq", default=5e3, type=int, help="How often (time steps) we evaluate")
-    parser.add_argument("--max_timesteps", default=1e6, type=int, help="Max time steps to run environment")
+    parser.add_argument("--start_timesteps", default=25e1, type=int, help="Time steps initial random policy is used")
+    parser.add_argument("--eval_freq", default=1e2, type=int, help="How often (time steps) we evaluate")
+    parser.add_argument("--max_timesteps", default=1e4, type=int, help="Max time steps to run environment")
     parser.add_argument("--expl_noise", default=0.1, help="Std of Gaussian exploration noise")
     parser.add_argument("--batch_size", default=256, type=int, help="Batch size for both actor and critic")
     parser.add_argument("--discount", default=0.99, help="Discount factor")
@@ -129,8 +131,10 @@ if __name__ == "__main__":
 
         # Perform action
         next_state, reward, done, _ = env.step(action)
-        done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
-
+        if t in range(900, 1000, 1):
+            env.render()
+        env.spec.max_episode_steps = 10
+        done_bool = float(done) if episode_timesteps < env.spec.max_episode_steps else 0
         # Store data in replay buffer
         replay_buffer.add(state, action, next_state, reward, done_bool)
 
@@ -154,5 +158,8 @@ if __name__ == "__main__":
         # Evaluate episode
         if (t + 1) % args.eval_freq == 0:
             evaluations.append(eval_policy(policy, args.env, args.seed))
+            print("eval:", evaluations[-1])
             np.save(f"./results/{file_name}", evaluations)
+            args.save_model = True
+            print("Model saved")
             if args.save_model: policy.save(f"./models/{file_name}")

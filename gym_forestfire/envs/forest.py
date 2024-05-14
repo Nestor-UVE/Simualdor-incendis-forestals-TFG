@@ -31,9 +31,9 @@ def get_neighborhoud(arr):
 
 class Forest:
 
-    def __init__(self, world_size=(64, 64), p_fire=0.4,
-                 p_ignition=0.0001, p_tree=0.0001,
-                 init_tree=0.8, extinguisher_ratio=0.2):
+    def __init__(self, world_size=(64, 64), p_fire=0.3,
+                 p_ignition=0, p_tree=0,
+                 init_tree=0.95, extinguisher_ratio=0.05):
         """
         :param world_size: Size of the world.
         :param p_fire: Probability of fire spreading from a burning tree to the neighboring trees.
@@ -45,6 +45,7 @@ class Forest:
         self.EMPTY_CELL = 0
         self.TREE_CELL = 1
         self.FIRE_CELL = 10
+        self.START = 1 #1 si comença 0 si no
 
         self.p_fire = p_fire
         self.p_ignition = p_ignition
@@ -63,6 +64,9 @@ class Forest:
         self.n_dims = len(self.world.shape)
         self.sum_over = tuple(-(i + 1) for i in range(self.n_dims))
 
+        
+        
+
         # a tree will burn if at least one neighbor is burning
         self.fire_rule_tree = np.zeros(9 * self.FIRE_CELL, np.uint16)
         self.fire_rule_tree[9:] = self.FIRE_CELL
@@ -76,32 +80,51 @@ class Forest:
         if action is not None:
             # change action from [-1, 1] to [0, 1]:
             action = (action + 1) / 2
+            # convert the action to the world coordinates
             x, y = int(self.world.shape[1] * action[1]), int(self.world.shape[0] * action[0])
             w, h = int(self.world.shape[1] * self.extinguisher_ratio), int(
                 self.world.shape[0] * self.extinguisher_ratio)
+            # define the rectangle of the action
             x_1, x_2 = max(0, int(x - w / 2)), min(self.world.shape[1], int(x + w / 2))
             y_1, y_2 = max(0, int(y - h / 2)), min(self.world.shape[0], int(y + h / 2))
             self.action_rect = [(x_1, y_1), (x_2, y_2)]
 
+            # check if the action has aimed at fire
             aimed_fire = np.any(self.fire[y_1:y_2, x_1:x_2])
-            self.world[y_1:y_2, x_1:x_2] = np.where(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL, self.EMPTY_CELL,
-                                                    self.world[y_1:y_2, x_1:x_2])
+            # self.world[y_1:y_2, x_1:x_2] = np.where(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL, self.EMPTY_CELL,
+            #                                         self.world[y_1:y_2, x_1:x_2])
+            self.world[y_1:y_2, x_1:x_2] = self.EMPTY_CELL
         else:
             self.action_rect = None
 
+        
+        # Compute the number of burning neighbors for each cell
         neighborhoods = get_neighborhoud(self.full)
         neighbor_ct = np.sum(neighborhoods, self.sum_over) - self.world
 
+        # Define the states of the cells in the grid
         self.fire = self.world == self.FIRE_CELL
         self.tree = self.world == self.TREE_CELL
         self.empty = self.world == self.EMPTY_CELL
-        is_fire = np.any(self.fire)
-
+        
+        is_fire = np.any(self.fire) 
+        if not is_fire:
+            # fire = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
+            #fire will be in the middle of the grid
+            fire = self.world.shape[0]//2, self.world.shape[1]//2
+            self.world[fire] = self.FIRE_CELL
+        
+        #count which step is it
+        self.START += 1
+        
         # Apply the update rules:
         # 1. A burning cell turns into an empty cell
         self.world[self.fire] = self.EMPTY_CELL
 
-        # 2. A tree will burn if at least one neighbor is burning
+        # 2. All adjecent trees to a burning cell catch fire with probability f
+        
+
+        
         fire_propagation_prop = np.random.random(self.world.shape) < self.p_fire
         fire_cells = np.logical_and(self.fire_rule_tree[neighbor_ct], fire_propagation_prop)
         self.world[np.logical_and(self.tree, fire_cells)] = self.FIRE_CELL
@@ -109,10 +132,14 @@ class Forest:
         # 3. A tree ignites with probability f even if no neighbor is burning
         ignition_cells = np.random.random(self.world.shape) < self.p_ignition
         self.world[np.logical_and(self.tree, ignition_cells)] = self.FIRE_CELL
-
+        #also a random tree will catch fire every time step
+        
         # 4. An empty space fills with a tree with probability p
         grow_cells = np.random.random(self.world.shape) < self.p_tree
         self.world[np.logical_and(self.empty, grow_cells)] = self.TREE_CELL
+        if not is_fire:
+            self.START = 1
+        is_fire = np.any(self.fire)
 
         return aimed_fire, is_fire
 
@@ -120,6 +147,7 @@ class Forest:
         tree_cells = np.random.random(self.world.shape) < self.p_init_tree
         self.world[tree_cells] = self.TREE_CELL
         self.world[np.logical_not(tree_cells)] = self.EMPTY_CELL
+        self.START = 1
 
     def render(self):
         im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2BGR)
@@ -139,7 +167,12 @@ if __name__ == '__main__':
     start = time.time()
 
     for t in range(n_steps):
-        forest.step()
-        forest.render()
+        if forest.is_fire:
+            print("Next step")
+            forest.step()
+            # forest.render()
+        else:
+            print("No fire, stopping...")
+            break        
 
     print("Time elapsed for {} steps: {} seconds".format(n_steps, time.time() - start))

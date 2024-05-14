@@ -38,8 +38,9 @@ class ForestFireEnv(gym.Env):
         aimed_fire, is_fire = self.forest.step(action)
         self.t += 1
         step_reward = 0
-
-        done = bool(self.t > T_HORIZON)
+        
+        # episode is done if the time horizon is reached or the fire is extinguished
+        done = bool(self.t > T_HORIZON or not is_fire)
 
         # reward calculation
         # if the action has been aimed at fire: add 1 to the reward
