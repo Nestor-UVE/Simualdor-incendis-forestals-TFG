@@ -31,14 +31,16 @@ class ForestFireEnv(gym.Env):
         self.forest = Forest(**env_kwargs)
 
         self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=0, high=10, shape=(STATE_H, STATE_W), dtype=np.uint8)
+        self.observation_space = spaces.Box(
+            low=0, high=10, shape=(STATE_H, STATE_W), dtype=np.uint8
+        )
         self._max_episode_steps = T_HORIZON
 
     def step(self, action):
         aimed_fire, is_fire = self.forest.step(action)
         self.t += 1
         step_reward = 0
-        
+
         # episode is done if the time horizon is reached or the fire is extinguished
         done = bool(self.t > T_HORIZON or not is_fire)
 
@@ -50,11 +52,11 @@ class ForestFireEnv(gym.Env):
         if not aimed_fire and is_fire:
             step_reward -= 1
         # if episode is over and at least 50% of the trees are remaining: add 100, otherwise: subtract 100
-        if done:
-            if np.mean(self.forest.world) > 0.5 * self.forest.p_init_tree:
-                step_reward += 300
-            else:
-                step_reward -= 300
+        # if done:
+        #     if np.mean(self.forest.world) > 0.5 * self.forest.p_init_tree:
+        #         step_reward += 300
+        #     else:
+        #         step_reward -= 300
 
         self.reward = step_reward
 
@@ -72,7 +74,7 @@ class ForestFireEnv(gym.Env):
 
         return self.step(None)[0]
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         self.forest.render()
 
     def close(self):
@@ -84,5 +86,10 @@ class ForestFireEnv(gym.Env):
 
     def _scale(self, im, height, width):
         original_height, original_width = im.shape
-        return [[im[int(original_height * r / height)][int(original_width * c / width)]
-                 for c in range(width)] for r in range(height)]
+        return [
+            [
+                im[int(original_height * r / height)][int(original_width * c / width)]
+                for c in range(width)
+            ]
+            for r in range(height)
+        ]

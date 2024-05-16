@@ -23,6 +23,7 @@ class Actor(nn.Module):
     """
     This class implements the Actor Network for TD3. It is a deterministic policy network that estimates the optimal action for a given state. The input to the Actor Network is the state. The output is the action. The Actor Network has two fully connected layers with ReLU activation functions. The first layer has 256 units, and the second layer has the same number of units as the action dimension. The output is scaled by the maximum action value. The Actor Network is trained using the deterministic policy gradient (DPG) algorithm. The Actor Network is optimized using the Adam optimizer.
     """
+
     def __init__(self, state_dim, action_dim, max_action, image_obs, cnn):
         super(Actor, self).__init__()
 
@@ -30,7 +31,7 @@ class Actor(nn.Module):
         self.cnn = cnn
         self.cnn_out = state_dim * 4 * 4
         if image_obs:
-            state_dim = state_dim ** 2
+            state_dim = state_dim**2
 
         if image_obs and cnn:
             self.cnn = nn.Sequential(
@@ -42,16 +43,11 @@ class Actor(nn.Module):
                 nn.ReLU(),
             )
             self.fcn = nn.Sequential(
-                nn.Linear(self.cnn_out, 512),
-                nn.ReLU(),
-                nn.Linear(512, 256)
+                nn.Linear(self.cnn_out, 512), nn.ReLU(), nn.Linear(512, 256)
             )
             self.cnn.apply(init_weights)
         else:
-            self.fcn = nn.Sequential(
-                nn.Linear(state_dim, 256),
-                nn.ReLU()
-            )
+            self.fcn = nn.Sequential(nn.Linear(state_dim, 256), nn.ReLU())
 
         self.l1 = nn.Linear(256, 256)
         self.l2 = nn.Linear(256, action_dim)
@@ -71,6 +67,7 @@ class Critic(nn.Module):
     """
     This class implements the Critic Network for TD3. It is a Q-network that estimates the Q-value of the state-action pair. It has two Q-networks to reduce overestimation bias. The Q-networks share the same architecture. The input to the Q-network is the state-action pair. The output is the Q-value of the state-action pair. The Q-network has two fully connected layers with ReLU activation functions. The first layer has 256 units, and the second layer has 1 unit. The Q-network is trained using the mean squared error loss function. The Q-network is optimized using the Adam optimizer.
     """
+
     def __init__(self, state_dim, action_dim, image_obs, cnn):
         super(Critic, self).__init__()
 
@@ -78,7 +75,7 @@ class Critic(nn.Module):
         self.cnn = cnn
         self.cnn_out = state_dim * 4 * 4
         if image_obs:
-            state_dim = state_dim ** 2
+            state_dim = state_dim**2
 
         if image_obs and cnn:
             self.cnn = nn.Sequential(
@@ -87,27 +84,25 @@ class Critic(nn.Module):
                 nn.Conv2d(32, 64, 4, stride=2, padding=0),
                 nn.ReLU(),
                 nn.Conv2d(64, 64, 3, stride=1, padding=0),
-                nn.ReLU()
+                nn.ReLU(),
             )
             self.fcn_1 = nn.Sequential(
                 nn.Linear(self.cnn_out + action_dim, 512),
                 nn.ReLU(),
-                nn.Linear(512, 256)
+                nn.Linear(512, 256),
             )
             self.fcn_2 = nn.Sequential(
                 nn.Linear(self.cnn_out + action_dim, 512),
                 nn.ReLU(),
-                nn.Linear(512, 256)
+                nn.Linear(512, 256),
             )
             self.cnn.apply(init_weights)
         else:
             self.fcn_1 = nn.Sequential(
-                nn.Linear(state_dim + action_dim, 256),
-                nn.ReLU()
+                nn.Linear(state_dim + action_dim, 256), nn.ReLU()
             )
             self.fcn_2 = nn.Sequential(
-                nn.Linear(state_dim + action_dim, 256),
-                nn.ReLU()
+                nn.Linear(state_dim + action_dim, 256), nn.ReLU()
             )
 
         # Q1 architecture
@@ -153,18 +148,19 @@ class TD3(object):
     """
     This class implements the Twin Delayed Deep Deterministic Policy Gradients (TD3) algorithm. TD3 is an off-policy algorithm that learns a deterministic policy. It uses two Q-networks to reduce overestimation bias. It also uses target policy smoothing and target policy noise to improve stability. The actor network is trained using the deterministic policy gradient (DPG) algorithm. The critic network is trained using the mean squared error loss function. The actor and critic networks are optimized using the Adam optimizer. The target networks are updated using the soft update rule. The TD3 algorithm is implemented in the train method. The train method samples a batch of experiences from the replay buffer. It computes the target Q-value using the target Q-networks. It computes the current Q-value using the Q-networks. It computes the critic loss using the mean squared error loss function. It optimizes the critic network using the Adam optimizer. It computes the actor loss using the deterministic policy gradient algorithm. It optimizes the actor network using the Adam optimizer. It updates the target networks using the soft update rule. The select_action method selects an action using the actor network. The save method saves the actor and critic networks to a file. The load method loads the actor and critic networks from a file.
     """
+
     def __init__(
-            self,
-            state_dim,
-            action_dim,
-            max_action,
-            image_obs=False,
-            discount=0.99,
-            tau=0.005,
-            policy_noise=0.2,
-            noise_clip=0.5,
-            policy_freq=2,
-            cnn=False,
+        self,
+        state_dim,
+        action_dim,
+        max_action,
+        image_obs=False,
+        discount=0.99,
+        tau=0.005,
+        policy_noise=0.2,
+        noise_clip=0.5,
+        policy_freq=2,
+        cnn=False,
     ):
 
         self.actor = Actor(state_dim, action_dim, max_action, image_obs, cnn).to(device)
@@ -204,13 +200,13 @@ class TD3(object):
 
         with torch.no_grad():
             # Select action according to policy and add clipped noise
-            noise = (
-                    torch.randn_like(action) * self.policy_noise
-            ).clamp(-self.noise_clip, self.noise_clip)
+            noise = (torch.randn_like(action) * self.policy_noise).clamp(
+                -self.noise_clip, self.noise_clip
+            )
 
-            next_action = (
-                    self.actor_target(next_state) + noise
-            ).clamp(-self.max_action, self.max_action)
+            next_action = (self.actor_target(next_state) + noise).clamp(
+                -self.max_action, self.max_action
+            )
 
             # Compute the target Q value
             target_Q1, target_Q2 = self.critic_target(next_state, next_action)
@@ -221,7 +217,9 @@ class TD3(object):
         current_Q1, current_Q2 = self.critic(state, action)
 
         # Compute critic loss
-        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(
+            current_Q2, target_Q
+        )
 
         # Optimize the critic
         self.critic_optimizer.zero_grad()
@@ -240,22 +238,35 @@ class TD3(object):
             self.actor_optimizer.step()
 
             # Update the frozen target models
-            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
-                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            for param, target_param in zip(
+                self.critic.parameters(), self.critic_target.parameters()
+            ):
+                target_param.data.copy_(
+                    self.tau * param.data + (1 - self.tau) * target_param.data
+                )
 
-            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
-                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            for param, target_param in zip(
+                self.actor.parameters(), self.actor_target.parameters()
+            ):
+                target_param.data.copy_(
+                    self.tau * param.data + (1 - self.tau) * target_param.data
+                )
 
     def save(self, filename):
         torch.save(self.critic.state_dict(), filename + "_critic")
         torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
+        import os
+
+        assert os.path.exists(filename + "_critic"), "File not saved!"
 
         torch.save(self.actor.state_dict(), filename + "_actor")
         torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
 
     def load(self, filename):
         self.critic.load_state_dict(torch.load(filename + "_critic"))
-        self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+        self.critic_optimizer.load_state_dict(
+            torch.load(filename + "_critic_optimizer")
+        )
         self.critic_target = copy.deepcopy(self.critic)
 
         self.actor.load_state_dict(torch.load(filename + "_actor"))
