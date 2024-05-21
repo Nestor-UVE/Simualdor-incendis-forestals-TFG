@@ -24,10 +24,12 @@ def eval_policy(policy, env_name, seed, eval_episodes=1):
     avg_reward = 0.0
     for _ in range(eval_episodes):
         state, done = eval_env.reset(), False
+
         while not done:
             action = policy.select_action(np.array(state))
-            state, reward, done, _ = eval_env.step(action)
+            state, reward, done, _ , _ = eval_env.step(action)
             avg_reward += reward
+
 
     avg_reward /= eval_episodes
     print("---------------------------------------")
@@ -55,8 +57,8 @@ if __name__ == "__main__":
         "--seed", default=0, type=int, help="Sets Gym, PyTorch and Numpy seeds"
     )
     parser.add_argument(
-        "--start_timesteps",
-        default=8750,
+        "--start_episode",
+        default=50,
         type=int,
         help="Time steps initial random policy is used",
     )
@@ -65,21 +67,21 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--max_timesteps",
-        default=1e4,
+        default=1e5,
         type=int,
         help="Max time steps to run environment",
     )
 
     parser.add_argument(
-        "--expl_noise", default=0.1, help="Std of Gaussian exploration noise"
+        "--expl_noise", default=0.3, help="Std of Gaussian exploration noise"
     )
     parser.add_argument(
         "--batch_size",
-        default=256,
+        default=128,
         type=int,
         help="Batch size for both actor and critic",
     )
-    parser.add_argument("--discount", default=0.99, help="Discount factor")
+    parser.add_argument("--discount", default=0.01, help="Discount factor")
     parser.add_argument("--tau", default=0.005, help="Target network update rate")
     parser.add_argument(
         "--policy_noise",
@@ -97,7 +99,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_model",
-        default="",
+        default="Resultats21-5-Trees",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -149,8 +151,10 @@ if __name__ == "__main__":
     if args.load_model != "":
         policy_file = file_name if args.load_model == "su" else args.load_model
         print(f"Loading model\n\n\n\n\n\n\n\n\n\n")
-        with open(f"./models/su.pkl", "rb") as f:
-            policy = pickle.load(f)
+        if os.path.exists(f"./models/{policy_file}.pkl"):
+            with open(f"./models/{args.load_model}.pkl", "rb") as f:
+                policy = pickle.load(f)
+                print(f"Model loaded from ./models/{args.load_model}.pkl")
 
     replay_buffer = utils.ReplayBuffer(state_dim, action_dim, image_obs=image_obs)
 
@@ -161,13 +165,16 @@ if __name__ == "__main__":
     episode_reward = 0
     episode_timesteps = 0
     episode_num = 0
+    result = []
+
+
 
     for t in range(int(args.max_timesteps)):
 
         episode_timesteps += 1
 
         # Select action randomly or according to policy
-        if t < args.start_timesteps:
+        if episode_num < args.start_episode:
             action = env.action_space.sample()
         else:
             action = (
@@ -176,11 +183,10 @@ if __name__ == "__main__":
             ).clip(-max_action, max_action)
 
         # Perform action
-        next_state, reward, done, _ = env.step(action)
-        # if t in range(4000, 4250, 1):
-        #     env.render()
-        if t in range(8750, 9000, 1):
+        next_state, reward, done, num_trees, _  = env.step(action)
+        if episode_num in range(args.start_episode, args.start_episode+150, 1):
             env.render()
+
 
         env.spec.max_episode_steps = 300
         done_bool = float(done) if episode_timesteps < env.spec.max_episode_steps else 0
@@ -191,14 +197,18 @@ if __name__ == "__main__":
         episode_reward += reward
 
         # Train agent after collecting sufficient data
-        if t >= args.start_timesteps:
+        if episode_num >= args.start_episode:
             policy.train(replay_buffer, args.batch_size)
 
         if done:
             # +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
-            print(
-                f"Total T: {t + 1} Episode Num: {episode_num + 1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}"
-            )
+            print(f"Total T: {t + 1} Episode Num: {episode_num + 1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f} Trees: {num_trees}")
+            # result.append(episode_reward)
+            # #write results only every 5 episodes
+            # with open(f"./results/{args.load_model}.txt", "a") as f:
+            #     f.write(f"{episode_reward}, {episode_timesteps}, {num_trees}\n")
+            #     print("Results saved")
+
             # Reset environment
             state, done = env.reset(), False
             episode_reward = 0
@@ -206,14 +216,15 @@ if __name__ == "__main__":
             episode_num += 1
 
         # Evaluate episode
-        if (episode_num + 1) % 100 == 0 and episode_num > 100:
-            evaluations.append(eval_policy(policy, args.env, args.seed))
-            with open(f"./results/su.pkl", "wb") as f:
-                pickle.dump(evaluations, f)
-            args.save_model = True
-            if args.save_model:
+        # if (episode_num + 1) % 20 == 0 and episode_num > args.start_episode:
+        #     # evaluations.append(eval_policy(policy, args.env, args.seed))
+        #     # with open(f"./results/{args.load_model}.pkl", "wb") as f:
+        #     #     pickle.dump(evaluations, f)
+        #     args.save_model = True
+        #     if args.save_model:
+        #         print("Saving model")
+        #         with open(f"./models/{args.load_model}.pkl", "wb") as f:
+        #             pickle.dump(policy, f)
 
-                print("Saving model")
-                with open(f"./models/su.pkl", "wb") as f:
-                    pickle.dump(policy, f)
-            episode_num += 1
+        #     episode_num += 1
+

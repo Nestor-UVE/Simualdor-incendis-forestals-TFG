@@ -50,14 +50,15 @@ class ForestFireEnv(gym.Env):
             step_reward += 1
         # if fire exists but the action has done nothing: subtract 1 from the reward
         if not aimed_fire and is_fire:
-            step_reward -= 1
+            step_reward -= 0.01
         # if episode is over and at least 50% of the trees are remaining: add 100, otherwise: subtract 100
-        # if done:
-        #     if np.mean(self.forest.world) > 0.5 * self.forest.p_init_tree:
-        #         step_reward += 300
-        #     else:
-        #         step_reward -= 300
-
+        if done:
+            if np.mean(self.forest.world) > 0.4 * self.forest.p_init_tree:
+                step_reward += 10 
+            else:
+                step_reward -= 10
+            step_reward = step_reward / self.t
+            
         self.reward = step_reward
 
         state = self.forest.world
@@ -65,7 +66,10 @@ class ForestFireEnv(gym.Env):
             state = self._scale(state, STATE_H, STATE_W)
         self.state = np.array(state) / self.forest.FIRE_CELL
 
-        return self.state, step_reward, done, {}
+        #count number of trees
+        num_trees = np.sum(self.forest.tree)
+
+        return self.state, step_reward, done, num_trees, {}
 
     def reset(self):
         self.forest.reset()

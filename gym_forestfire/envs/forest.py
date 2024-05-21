@@ -150,7 +150,7 @@ class Forest:
     def render(self):
         im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2BGR)
         im[self.tree, 1] = 255
-        im[self.fire, 2] = 255
+        im[self.fire, 2] = 170
         if self.action_rect is not None:
             cv2.rectangle(
                 im, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1
