@@ -38,7 +38,7 @@ class Forest:
         p_ignition=0,
         p_tree=0,
         init_tree=0.95,
-        extinguisher_ratio=0.05,
+        extinguisher_ratio=0.1,
     ):
         """
         :param world_size: Size of the world.
@@ -115,7 +115,9 @@ class Forest:
         if not is_fire:
             # fire = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
             # fire will be in the middle of the grid
-            fire = self.world.shape[0] // 2, self.world.shape[1] // 2
+            # fire is in a random position inside 16x16 grid
+            fire = np.random.randint(16, self.world.shape[0]-16), np.random.randint(16, self.world.shape[1]-16)
+            # fire = self.world.shape[0] // 2, self.world.shape[1] // 2
             self.world[fire] = self.FIRE_CELL
 
         # Apply the update rules:

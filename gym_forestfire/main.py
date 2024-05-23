@@ -17,7 +17,7 @@ import gym_forestfire.agents.td3 as td3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=1):
+def eval_policy(policy, env_name, seed, eval_episodes=3):
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
 
@@ -29,6 +29,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=1):
             action = policy.select_action(np.array(state))
             state, reward, done, _ , _ = eval_env.step(action)
             avg_reward += reward
+            # eval_env.render()
 
 
     avg_reward /= eval_episodes
@@ -99,7 +100,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_model",
-        default="Resultats21-5-Trees",
+        default="Eval-Model",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -149,9 +150,8 @@ if __name__ == "__main__":
         exit("The {} algorithm is not implemented.".format(args.policy))
 
     if args.load_model != "":
-        policy_file = file_name if args.load_model == "su" else args.load_model
         print(f"Loading model\n\n\n\n\n\n\n\n\n\n")
-        if os.path.exists(f"./models/{policy_file}.pkl"):
+        if os.path.exists(f"./models/{args.load_model}.pkl"):
             with open(f"./models/{args.load_model}.pkl", "rb") as f:
                 policy = pickle.load(f)
                 print(f"Model loaded from ./models/{args.load_model}.pkl")
@@ -184,7 +184,7 @@ if __name__ == "__main__":
 
         # Perform action
         next_state, reward, done, num_trees, _  = env.step(action)
-        if episode_num in range(args.start_episode, args.start_episode+150, 1):
+        if episode_num in range(args.start_episode+3, args.start_episode+10, 1):
             env.render()
 
 
@@ -203,11 +203,10 @@ if __name__ == "__main__":
         if done:
             # +1 to account for 0 indexing. +0 on ep_timesteps since it will increment +1 even if done=True
             print(f"Total T: {t + 1} Episode Num: {episode_num + 1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f} Trees: {num_trees}")
-            # result.append(episode_reward)
-            # #write results only every 5 episodes
-            # with open(f"./results/{args.load_model}.txt", "a") as f:
-            #     f.write(f"{episode_reward}, {episode_timesteps}, {num_trees}\n")
-            #     print("Results saved")
+            result.append(episode_reward)
+            #write results only every 5 episodes
+            with open(f"./results/{args.load_model}.txt", "a") as f:
+                f.write(f"{episode_reward}, {episode_timesteps}, {num_trees}\n")
 
             # Reset environment
             state, done = env.reset(), False
@@ -216,15 +215,17 @@ if __name__ == "__main__":
             episode_num += 1
 
         # Evaluate episode
-        # if (episode_num + 1) % 20 == 0 and episode_num > args.start_episode:
-        #     # evaluations.append(eval_policy(policy, args.env, args.seed))
-        #     # with open(f"./results/{args.load_model}.pkl", "wb") as f:
-        #     #     pickle.dump(evaluations, f)
-        #     args.save_model = True
-        #     if args.save_model:
-        #         print("Saving model")
-        #         with open(f"./models/{args.load_model}.pkl", "wb") as f:
-        #             pickle.dump(policy, f)
+        if (episode_num + 1) % 10 == 0 and episode_num > args.start_episode:
+            evaluations = (eval_policy(policy, args.env, args.seed))
+            with open(f"./results/{args.load_model}.txt", "a") as f:
+                f.write(f"Evaluation: {evaluations}\n")
+            evaluations = []
+            
+            args.save_model = True
+            if args.save_model:
+                print("Saving model")
+                with open(f"./models/{args.load_model}.pkl", "wb") as f:
+                    pickle.dump(policy, f)
 
-        #     episode_num += 1
+            episode_num += 1
 

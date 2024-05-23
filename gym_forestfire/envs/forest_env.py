@@ -57,8 +57,13 @@ class ForestFireEnv(gym.Env):
                 step_reward += 10 
             else:
                 step_reward -= 10
+            if np.mean(self.forest.world) > 0.9 * self.forest.p_init_tree and aimed_fire:
+                step_reward += 10
+            if self.t <= 3 and not aimed_fire:
+                step_reward = -10 
             step_reward = step_reward / self.t
-            
+        
+        #Fer que contra menys steps mes punts, també com més arbres
         self.reward = step_reward
 
         state = self.forest.world
