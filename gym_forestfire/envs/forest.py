@@ -38,7 +38,7 @@ class Forest:
         p_ignition=0,
         p_tree=0,
         init_tree=0.95,
-        extinguisher_ratio=0.1,
+        extinguisher_ratio=0.05,
     ):
         """
         :param world_size: Size of the world.
@@ -76,6 +76,9 @@ class Forest:
     def step(self, action=None):
         # if the action has been aimed at fire, returns true
         aimed_fire = False
+        num_trees = 0
+        border = False
+        num_fire = 0
 
         # action is a normalized 2D vector with [x. y] as the center
         # of the square of applying fire extinguishers
@@ -94,10 +97,16 @@ class Forest:
             y_1, y_2 = max(0, int(y - h / 2)), min(self.world.shape[0], int(y + h / 2))
             self.action_rect = [(x_1, y_1), (x_2, y_2)]
 
+            # if rectangle is touching an arist of the world bool is true
+            if x_1 == 0 or x_2 == self.world.shape[1] or y_1 == 0 or y_2 == self.world.shape[0]:
+                border = True
+
             # check if the action has aimed at fire
             aimed_fire = np.any(self.fire[y_1:y_2, x_1:x_2])
             # self.world[y_1:y_2, x_1:x_2] = np.where(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL, self.EMPTY_CELL,
             #                                         self.world[y_1:y_2, x_1:x_2])
+            num_trees = np.sum(self.world[y_1:y_2, x_1:x_2] == self.TREE_CELL)
+            num_fire = np.sum(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL)
             self.world[y_1:y_2, x_1:x_2] = self.EMPTY_CELL
         else:
             self.action_rect = None
@@ -142,7 +151,8 @@ class Forest:
         self.world[np.logical_and(self.empty, grow_cells)] = self.TREE_CELL
         is_fire = np.any(self.fire)
 
-        return aimed_fire, is_fire
+
+        return aimed_fire, is_fire, num_trees, border, num_fire
 
     def reset(self):
         tree_cells = np.random.random(self.world.shape) < self.p_init_tree

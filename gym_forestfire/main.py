@@ -17,7 +17,7 @@ import gym_forestfire.agents.td3 as td3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=3):
+def eval_policy(policy, env_name, seed, eval_episodes=2):
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
 
@@ -29,7 +29,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=3):
             action = policy.select_action(np.array(state))
             state, reward, done, _ , _ = eval_env.step(action)
             avg_reward += reward
-            # eval_env.render()
+            eval_env.render()
 
 
     avg_reward /= eval_episodes
@@ -59,12 +59,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--start_episode",
-        default=50,
+        default=64,
         type=int,
         help="Time steps initial random policy is used",
     )
     parser.add_argument(
-        "--eval_freq", default=5e3, type=int, help="How often (time steps) we evaluate"
+        "--eval_freq", default=10, type=int, help="How often (episodes) we evaluate"
     )
     parser.add_argument(
         "--max_timesteps",
@@ -74,33 +74,46 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--expl_noise", default=0.3, help="Std of Gaussian exploration noise"
+        "--expl_noise", default=0.15, help="Std of Gaussian exploration noise"
     )
     parser.add_argument(
         "--batch_size",
-        default=128,
+        default=64,
         type=int,
         help="Batch size for both actor and critic",
     )
-    parser.add_argument("--discount", default=0.01, help="Discount factor")
-    parser.add_argument("--tau", default=0.005, help="Target network update rate")
+    parser.add_argument(
+        "--discount",
+        default=0.99,
+        help="Discount factor"
+        )
+    parser.add_argument(
+        "--tau",
+        default=0.005,
+        help="Target network update rate")
     parser.add_argument(
         "--policy_noise",
-        default=0.2,
+        default=0.3,
         help="Noise added to target policy during critic update",
     )
     parser.add_argument(
-        "--noise_clip", default=0.5, help="Range to clip target policy noise"
+        "--noise_clip", default=0.2, help="Range to clip target policy noise"
     )
     parser.add_argument(
-        "--policy_freq", default=2, type=int, help="Frequency of delayed policy updates"
+        "--policy_freq", default=8, type=int, help="Frequency of delayed policy updates"
+    )
+    parser.add_argument(
+        "--train_freq",
+        default=2,
+        type=int,
+        help="Frequency of actor and critic updates",
     )
     parser.add_argument(
         "--save_model", action="store_true", help="Save model and optimizer parameters"
     )
     parser.add_argument(
         "--load_model",
-        default="Eval-Model",
+        default="27-5-Caminant",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -197,7 +210,7 @@ if __name__ == "__main__":
         episode_reward += reward
 
         # Train agent after collecting sufficient data
-        if episode_num >= args.start_episode:
+        if episode_num >= args.start_episode and episode_num % args.train_freq == 0:
             policy.train(replay_buffer, args.batch_size)
 
         if done:
@@ -215,7 +228,7 @@ if __name__ == "__main__":
             episode_num += 1
 
         # Evaluate episode
-        if (episode_num + 1) % 10 == 0 and episode_num > args.start_episode:
+        if (episode_num + 1) % args.eval_freq == 0 and episode_num > args.start_episode:
             evaluations = (eval_policy(policy, args.env, args.seed))
             with open(f"./results/{args.load_model}.txt", "a") as f:
                 f.write(f"Evaluation: {evaluations}\n")
