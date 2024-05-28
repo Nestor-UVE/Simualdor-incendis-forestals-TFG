@@ -59,12 +59,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--start_episode",
-        default=64,
+        default=32,
         type=int,
         help="Time steps initial random policy is used",
     )
     parser.add_argument(
-        "--eval_freq", default=10, type=int, help="How often (episodes) we evaluate"
+        "--eval_freq", default=20, type=int, help="How often (episodes) we evaluate"
     )
     parser.add_argument(
         "--max_timesteps",
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--batch_size",
-        default=64,
+        default=32,
         type=int,
         help="Batch size for both actor and critic",
     )
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         help="Target network update rate")
     parser.add_argument(
         "--policy_noise",
-        default=0.3,
+        default=0.2,
         help="Noise added to target policy during critic update",
     )
     parser.add_argument(
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_model",
-        default="27-5-Caminant",
+        default="rothermel",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     replay_buffer = utils.ReplayBuffer(state_dim, action_dim, image_obs=image_obs)
 
     # Evaluate untrained policy
-    evaluations = [eval_policy(policy, args.env, args.seed)]
+    # evaluations = [eval_policy(policy, args.env, args.seed)]
 
     state, done = env.reset(), False
     episode_reward = 0

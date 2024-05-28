@@ -1,190 +1,199 @@
-"""
-Copyright 2020 Sahand Rezaei-Shoshtari. All Rights Reserved.
-
-Forest-fire simulation based on the rossel and
-Schwabl (1992) model. The vectorized implementation
-of cellular automaton was adapted from:
-http://drsfenner.org/blog/2015/08/game-of-life-in-numpy-2/
-
-Author: Sahand Rezaei-Shoshtari
-"""
-
 import numpy as np
 import cv2
 import time
-from numpy.lib.stride_tricks import as_strided
+from gym_forestfire.envs.presets import *
+from gym_forestfire.envs.ros import compute_rate_of_spread
+
+import matplotlib.pyplot as plt
+
+# Simulation constants
+CELL_SIZE = 10
+TIME_STEP = 10 / 60 # minutes
+GRID_SIZE = (64, 64)
 
 
-def get_neighborhoud(arr):
-    """
-    Computes the neighborhood for each element in the grid.
-    """
-    assert all(_len > 2 for _len in arr.shape)
+# Fuel parameters
+shortgrass = ShortGrass
+chaparral = HeavyLoggingSlash
+grass = TallGrass
+particle = FuelParticle()
 
-    nDims = len(arr.shape)
-    newShape = [_len - 2 for _len in arr.shape]
-    newShape.extend([3] * nDims)
+w_0 = chaparral.w_0
+delta = chaparral.delta
+M_x = chaparral.M_x
+sigma = chaparral.sigma
 
-    newStrides = arr.strides + arr.strides
-    return as_strided(arr, shape=newShape, strides=newStrides)
+h = particle.h
+S_T = particle.S_T
+S_e = particle.S_e
+p_p = particle.p_p
+
+M_f = 0.03
+U = 3 * 3.28084  # m/s
+U_dir = 0
+max_burn_time = 384/sigma * 10
 
 
 class Forest:
+    EMPTY_CELL = 0
+    TREE_CELL = 1
+    FIRE_CELL = 10
 
-    def __init__(
-        self,
-        world_size=(64, 64),
-        p_fire=0.3,
-        p_ignition=0,
-        p_tree=0,
-        init_tree=0.95,
-        extinguisher_ratio=0.05,
-    ):
-        """
-        :param world_size: Size of the world.
-        :param p_fire: Probability of fire spreading from a burning tree to the neighboring trees.
-        :param p_ignition: Probability of catching fire even if no neighbor is burning.
-        :param p_tree: Probability of a tree growing in an empty space.
-        :param init_tree: Initial probability of tree distribution.
-        :param extinguisher_ratio: Ratio of the size of the fire extinguisher wrt to world size.
-        """
-        self.EMPTY_CELL = 0
-        self.TREE_CELL = 1
-        self.FIRE_CELL = 10
-
+    def __init__(self, world_size=(64, 64), p_fire=0.3, init_tree=0.995, extinguisher_ratio=0.05):
         self.p_fire = p_fire
-        self.p_ignition = p_ignition
-        self.p_tree = p_tree
         self.p_init_tree = init_tree
         self.extinguisher_ratio = extinguisher_ratio
+        self.world_size = world_size
 
-        # used for rendering the action rectangle
-        self.action_rect = None
-
+        # Initialize grid
         full_size = tuple(i + 2 for i in world_size)
         self.full = np.zeros(full_size, dtype=np.uint8)
         nd_slice = (slice(1, -1),) * len(world_size)
-
         self.world = self.full[nd_slice]
         self.n_dims = len(self.world.shape)
         self.sum_over = tuple(-(i + 1) for i in range(self.n_dims))
+        self.step_counter = 0
+        self.action_rect = None
 
-        # a tree will burn if at least one neighbor is burning
-        self.fire_rule_tree = np.zeros(9 * self.FIRE_CELL, np.uint16)
-        self.fire_rule_tree[9:] = self.FIRE_CELL
+    def reset_grid(self):
+        def init_no_fuel():
+            no_fuel_matrix = np.zeros(GRID_SIZE, dtype=bool)
+            # no_fuel_matrix[48:52, :35] = True  # Riu
+            # no_fuel_matrix[35:65, 35:40] = True #Pedra
+            no_fuel_matrix[np.random.choice([True, False], GRID_SIZE, p=[1-self.p_init_tree, self.p_init_tree])] = True
+            return no_fuel_matrix
+
+        grid = np.zeros(GRID_SIZE, dtype=[
+            ('is_burning', bool), ('burned', bool), ('no_fuel', bool), ('time_burning', float), ('ros', float)
+        ])
+
+        grid['no_fuel'] = init_no_fuel()
+        grid['time_burning'] = 0
+        grid['burned'] = False
+
+        return grid
+
+    def init_grid(self, grid):
+        grid['no_fuel'] = self.world == self.EMPTY_CELL
+
+    def grid_to_world(self, new_grid):
+        self.world = np.where(new_grid['is_burning'], self.FIRE_CELL, self.world)
+        self.world = np.where(np.logical_and(~new_grid['is_burning'], ~new_grid['burned'], ~new_grid['no_fuel']), self.TREE_CELL, self.world)
+        self.world = np.where(new_grid['no_fuel'], self.EMPTY_CELL, self.world)
+        self.world = np.where(new_grid['burned'], self.EMPTY_CELL, self.world)
+
+    def update(self, grid):
+        self.init_grid(grid)
+        # #plot grid
+        # plt.imshow(grid['no_fuel'], cmap='hot', interpolation='nearest')
+        # plt.show()
+        new_grid = grid.copy()
+        
+        rows, cols = GRID_SIZE
+        
+        # Precompute boundaries
+        max_row, max_col = rows - 1, cols - 1
+
+        for i in range(rows):
+            for j in range(cols):
+                cell = grid[i, j]
+                updated_cell = new_grid[i, j]
+                if cell['is_burning']:
+                    updated_cell['time_burning'] += TIME_STEP
+                    if updated_cell['time_burning'] > max_burn_time:
+                        updated_cell['is_burning'] = False
+                        updated_cell['burned'] = True
+                    if updated_cell['time_burning'] * cell['ros'] >= CELL_SIZE:
+                        for ni, nj in [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]:
+                            if 0 <= ni <= max_row and 0 <= nj <= max_col:
+                                neighbor = new_grid[ni, nj]
+                                if not neighbor['is_burning'] and not neighbor['burned'] and not neighbor['no_fuel']:
+                                    r = compute_rate_of_spread(
+                                        i, j, ni, nj, w_0, delta, M_x, sigma,
+                                        h, S_T, S_e, p_p, M_f, U, U_dir
+                                    )
+                                    neighbor['ros'] = r
+                                    neighbor['is_burning'] = True
+        self.grid_to_world(new_grid)
+        return new_grid
 
     def step(self, action=None):
-        # if the action has been aimed at fire, returns true
         aimed_fire = False
         num_trees = 0
         border = False
         num_fire = 0
+        self.step_counter += 1
 
-        # action is a normalized 2D vector with [x. y] as the center
-        # of the square of applying fire extinguishers
         if action is not None:
-            # change action from [-1, 1] to [0, 1]:
-            action = (action + 1) / 2
-            # convert the action to the world coordinates
-            x, y = int(self.world.shape[1] * action[1]), int(
-                self.world.shape[0] * action[0]
-            )
-            w, h = int(self.world.shape[1] * self.extinguisher_ratio), int(
-                self.world.shape[0] * self.extinguisher_ratio
-            )
-            # define the rectangle of the action
+            action = (action + 1) / 2  # Normalize action to [0, 1]
+            x, y = int(self.world.shape[1] * action[1]), int(self.world.shape[0] * action[0])
+            w, h = int(self.world.shape[1] * self.extinguisher_ratio), int(self.world.shape[0] * self.extinguisher_ratio)
             x_1, x_2 = max(0, int(x - w / 2)), min(self.world.shape[1], int(x + w / 2))
             y_1, y_2 = max(0, int(y - h / 2)), min(self.world.shape[0], int(y + h / 2))
             self.action_rect = [(x_1, y_1), (x_2, y_2)]
 
-            # if rectangle is touching an arist of the world bool is true
             if x_1 == 0 or x_2 == self.world.shape[1] or y_1 == 0 or y_2 == self.world.shape[0]:
                 border = True
 
-            # check if the action has aimed at fire
             aimed_fire = np.any(self.fire[y_1:y_2, x_1:x_2])
-            # self.world[y_1:y_2, x_1:x_2] = np.where(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL, self.EMPTY_CELL,
-            #                                         self.world[y_1:y_2, x_1:x_2])
             num_trees = np.sum(self.world[y_1:y_2, x_1:x_2] == self.TREE_CELL)
             num_fire = np.sum(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL)
             self.world[y_1:y_2, x_1:x_2] = self.EMPTY_CELL
         else:
             self.action_rect = None
 
-        # Compute the number of burning neighbors for each cell
-        neighborhoods = get_neighborhoud(self.full)
-        neighbor_ct = np.sum(neighborhoods, self.sum_over) - self.world
-
-        # Define the states of the cells in the grid
         self.fire = self.world == self.FIRE_CELL
         self.tree = self.world == self.TREE_CELL
         self.empty = self.world == self.EMPTY_CELL
 
         is_fire = np.any(self.fire)
+
         if not is_fire:
-            # fire = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
-            # fire will be in the middle of the grid
-            # fire is in a random position inside 16x16 grid
-            fire = np.random.randint(16, self.world.shape[0]-16), np.random.randint(16, self.world.shape[1]-16)
-            # fire = self.world.shape[0] // 2, self.world.shape[1] // 2
-            self.world[fire] = self.FIRE_CELL
+            # start_point = self.world.shape[0] // 2, self.world.shape[1] // 2
+            start_point = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
+            self.world[start_point] = self.FIRE_CELL
+            self.grid['is_burning'][start_point] = True
+            self.grid['ros'] = 1000
 
-        # Apply the update rules:
-        # 1. A burning cell turns into an empty cell
-        self.world[self.fire] = self.EMPTY_CELL
-
-        # 2. All adjecent trees to a burning cell catch fire with probability f
-
-        fire_propagation_prop = np.random.random(self.world.shape) < self.p_fire
-        fire_cells = np.logical_and(
-            self.fire_rule_tree[neighbor_ct], fire_propagation_prop
-        )
-        self.world[np.logical_and(self.tree, fire_cells)] = self.FIRE_CELL
-
-        # 3. A tree ignites with probability f even if no neighbor is burning
-        ignition_cells = np.random.random(self.world.shape) < self.p_ignition
-        self.world[np.logical_and(self.tree, ignition_cells)] = self.FIRE_CELL
-        # also a random tree will catch fire every time step
-
-        # 4. An empty space fills with a tree with probability p
-        grow_cells = np.random.random(self.world.shape) < self.p_tree
-        self.world[np.logical_and(self.empty, grow_cells)] = self.TREE_CELL
-        is_fire = np.any(self.fire)
-
+        if is_fire and self.step_counter % 1 == 0:
+            self.grid = self.update(self.grid)
 
         return aimed_fire, is_fire, num_trees, border, num_fire
 
     def reset(self):
-        tree_cells = np.random.random(self.world.shape) < self.p_init_tree
-        self.world[tree_cells] = self.TREE_CELL
-        self.world[np.logical_not(tree_cells)] = self.EMPTY_CELL
+        self.grid = self.reset_grid()
+        self.grid_to_world(self.grid)
+        self.step_counter = 0
 
     def render(self):
         im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2BGR)
         im[self.tree, 1] = 255
         im[self.fire, 2] = 170
         if self.action_rect is not None:
-            cv2.rectangle(
-                im, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1
-            )
+            cv2.rectangle(im, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1)
         im = cv2.resize(im, (640, 640))
         cv2.imshow("Forest", im)
         cv2.waitKey(50)
 
 
 if __name__ == "__main__":
-    forest = Forest(world_size=(128, 128))
+    forest = Forest(world_size=(64, 64))
     forest.reset()
-    n_steps = 20
-    start = time.time()
-
-    for t in range(n_steps):
-        if forest.is_fire:
-            print("Next step")
+    n_steps = 100
+    
+    total_time = 0
+    n_steps = 250
+    average = 10
+    for _ in range(average):
+        start = time.time()
+        for i in range(n_steps):
             forest.step()
-            # forest.render()
-        else:
-            print("No fire, stopping...")
-            break
+            forest.render()
+        forest.reset()
 
-    print("Time elapsed for {} steps: {} seconds".format(n_steps, time.time() - start))
+        end = time.time()
+        elapsed_time = end - start
+        total_time += elapsed_time
+
+    average_time = total_time / average
+    print(f'Average elapsed time: {average_time}', 0.306)

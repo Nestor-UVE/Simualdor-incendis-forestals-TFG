@@ -17,7 +17,7 @@ from gym_forestfire.envs.forest import Forest
 
 STATE_W = 64
 STATE_H = 64
-T_HORIZON = 300
+T_HORIZON = 150
 
 
 class ForestFireEnv(gym.Env):
@@ -51,7 +51,7 @@ class ForestFireEnv(gym.Env):
         # reward calculation
         # # if the action has been aimed at fire: add 1 to the reward
         if aimed_fire:
-            step_reward += 0.1 * num_fire
+            step_reward += 0.1 
             self.some_aimed = True
         if border:
             step_reward -= 0.1
