@@ -7,21 +7,20 @@ from gym_forestfire.envs.ros import compute_rate_of_spread
 import matplotlib.pyplot as plt
 
 # Simulation constants
-CELL_SIZE = 10
-TIME_STEP = 10 / 60 # minutes
+CELL_SIZE = 10   # 3,048m 
+TIME_STEP = 3 / 60 # minutes
 GRID_SIZE = (64, 64)
 
 
 # Fuel parameters
-shortgrass = ShortGrass
-chaparral = HeavyLoggingSlash
-grass = TallGrass
+# boscs_bages = TimberLitterUnderstory
+boscs_bages = Chaparral
 particle = FuelParticle()
 
-w_0 = chaparral.w_0
-delta = chaparral.delta
-M_x = chaparral.M_x
-sigma = chaparral.sigma
+w_0 = boscs_bages.w_0
+delta = boscs_bages.delta
+M_x = boscs_bages.M_x
+sigma = boscs_bages.sigma
 
 h = particle.h
 S_T = particle.S_T
@@ -29,17 +28,18 @@ S_e = particle.S_e
 p_p = particle.p_p
 
 M_f = 0.03
-U = 3 * 3.28084  # m/s
-U_dir = 0
-max_burn_time = 384/sigma * 10
+U = 10.5 * 3.28084  # m/s   #usar 6 m/s
+U_dir = 0 # degrees
+max_burn_time = 384/sigma / TIME_STEP 
 
 
 class Forest:
     EMPTY_CELL = 0
     TREE_CELL = 1
     FIRE_CELL = 10
+    BURNED_CELL = 11
 
-    def __init__(self, world_size=(64, 64), p_fire=0.3, init_tree=0.995, extinguisher_ratio=0.05):
+    def __init__(self, world_size=(64, 64), p_fire=0.3, init_tree=1, extinguisher_ratio=0.05):
         self.p_fire = p_fire
         self.p_init_tree = init_tree
         self.extinguisher_ratio = extinguisher_ratio
@@ -75,16 +75,24 @@ class Forest:
 
     def init_grid(self, grid):
         grid['no_fuel'] = self.world == self.EMPTY_CELL
+        grid['is_burning'] = self.world == self.EMPTY_CELL
+        grid['is_burning'] = self.world == self.FIRE_CELL
+
+        grid['burned'] = self.world == self.BURNED_CELL
+
+        return grid
 
     def grid_to_world(self, new_grid):
         self.world = np.where(new_grid['is_burning'], self.FIRE_CELL, self.world)
         self.world = np.where(np.logical_and(~new_grid['is_burning'], ~new_grid['burned'], ~new_grid['no_fuel']), self.TREE_CELL, self.world)
         self.world = np.where(new_grid['no_fuel'], self.EMPTY_CELL, self.world)
-        self.world = np.where(new_grid['burned'], self.EMPTY_CELL, self.world)
+        self.world = np.where(new_grid['burned'], self.BURNED_CELL, self.world)
+
+        return self.world
 
     def update(self, grid):
-        self.init_grid(grid)
-        # #plot grid
+        grid = self.init_grid(grid)
+        #plot grid
         # plt.imshow(grid['no_fuel'], cmap='hot', interpolation='nearest')
         # plt.show()
         new_grid = grid.copy()
@@ -97,23 +105,28 @@ class Forest:
         for i in range(rows):
             for j in range(cols):
                 cell = grid[i, j]
-                updated_cell = new_grid[i, j]
+                #Comprovem només cel·les amb foc
                 if cell['is_burning']:
-                    updated_cell['time_burning'] += TIME_STEP
-                    if updated_cell['time_burning'] > max_burn_time:
-                        updated_cell['is_burning'] = False
-                        updated_cell['burned'] = True
-                    if updated_cell['time_burning'] * cell['ros'] >= CELL_SIZE:
+                    #Cal comprovar el fuel, ja que pot ser mitigada per l'agent. 
+                    if cell['time_burning'] > max_burn_time and not cell['no_fuel']:
+                        new_grid[i, j]['is_burning'] = False
+                        new_grid[i, j]['burned'] = True
+                    else: 
+                        new_grid[i, j]['time_burning'] += TIME_STEP
+                    # Si ha passat temps per propagar-se i encara crema
+                    if cell['time_burning'] * cell['ros'] >= CELL_SIZE and cell['is_burning']:
+                        # Veïns dins dels límits
                         for ni, nj in [(i-1, j), (i+1, j), (i, j-1), (i, j+1)]:
                             if 0 <= ni <= max_row and 0 <= nj <= max_col:
-                                neighbor = new_grid[ni, nj]
+                                neighbor = grid[ni, nj]
+                                # Si el veí no crema, ni ha cremat, i té fuel
                                 if not neighbor['is_burning'] and not neighbor['burned'] and not neighbor['no_fuel']:
                                     r = compute_rate_of_spread(
                                         i, j, ni, nj, w_0, delta, M_x, sigma,
                                         h, S_T, S_e, p_p, M_f, U, U_dir
                                     )
-                                    neighbor['ros'] = r
-                                    neighbor['is_burning'] = True
+                                    new_grid[ni,nj]['ros'] = r
+                                    new_grid[ni,nj]['is_burning'] = True
         self.grid_to_world(new_grid)
         return new_grid
 
@@ -123,6 +136,8 @@ class Forest:
         border = False
         num_fire = 0
         self.step_counter += 1
+        burned = False
+        valid_action = True
 
         if action is not None:
             action = (action + 1) / 2  # Normalize action to [0, 1]
@@ -132,33 +147,41 @@ class Forest:
             y_1, y_2 = max(0, int(y - h / 2)), min(self.world.shape[0], int(y + h / 2))
             self.action_rect = [(x_1, y_1), (x_2, y_2)]
 
+            burned = np.any(self.burned[y_1:y_2, x_1:x_2])
+            
             if x_1 == 0 or x_2 == self.world.shape[1] or y_1 == 0 or y_2 == self.world.shape[0]:
                 border = True
 
             aimed_fire = np.any(self.fire[y_1:y_2, x_1:x_2])
             num_trees = np.sum(self.world[y_1:y_2, x_1:x_2] == self.TREE_CELL)
-            num_fire = np.sum(self.world[y_1:y_2, x_1:x_2] == self.FIRE_CELL)
-            self.world[y_1:y_2, x_1:x_2] = self.EMPTY_CELL
+            self.world[y_1:y_2, x_1:x_2] = np.where(self.burned[y_1:y_2, x_1:x_2], self.world[y_1:y_2, x_1:x_2], self.EMPTY_CELL)
         else:
             self.action_rect = None
 
         self.fire = self.world == self.FIRE_CELL
         self.tree = self.world == self.TREE_CELL
         self.empty = self.world == self.EMPTY_CELL
+        self.burned = self.world == self.BURNED_CELL
 
         is_fire = np.any(self.fire)
 
         if not is_fire:
+
             # start_point = self.world.shape[0] // 2, self.world.shape[1] // 2
-            start_point = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
+            # start_point = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
+            #start point is somewhere within [20,20] [44,44]
+            start_point = np.random.randint(20, 44), np.random.randint(20, 44)
             self.world[start_point] = self.FIRE_CELL
             self.grid['is_burning'][start_point] = True
             self.grid['ros'] = 1000
 
-        if is_fire and self.step_counter % 1 == 0:
+        if is_fire:
             self.grid = self.update(self.grid)
 
-        return aimed_fire, is_fire, num_trees, border, num_fire
+        #fire_cells counts the number of burning cells in the grid
+        fire_cells = np.sum(self.fire)
+
+        return aimed_fire, is_fire, num_trees, border, fire_cells, burned
 
     def reset(self):
         self.grid = self.reset_grid()
@@ -167,8 +190,12 @@ class Forest:
 
     def render(self):
         im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2BGR)
-        im[self.tree, 1] = 255
+        im[self.tree, 1] = 200
         im[self.fire, 2] = 170
+        #burned cell color grey, not blue
+        im[self.burned, 0] = 105
+        im[self.burned, 1] = 105
+        im[self.burned, 2] = 105
         if self.action_rect is not None:
             cv2.rectangle(im, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1)
         im = cv2.resize(im, (640, 640))
@@ -178,17 +205,16 @@ class Forest:
 
 if __name__ == "__main__":
     forest = Forest(world_size=(64, 64))
-    forest.reset()
-    n_steps = 100
-    
+    forest.reset()  
     total_time = 0
-    n_steps = 250
+    n_steps = 1000
     average = 10
     for _ in range(average):
         start = time.time()
         for i in range(n_steps):
             forest.step()
             forest.render()
+            print(f'Step {i}')
         forest.reset()
 
         end = time.time()

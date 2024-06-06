@@ -17,19 +17,20 @@ import gym_forestfire.agents.td3 as td3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=2):
+def eval_policy(policy, env_name, seed, eval_episodes=3):
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
 
     avg_reward = 0.0
-    for _ in range(eval_episodes):
+    for i in range(eval_episodes):
         state, done = eval_env.reset(), False
 
         while not done:
             action = policy.select_action(np.array(state))
             state, reward, done, _ , _ = eval_env.step(action)
             avg_reward += reward
-            eval_env.render()
+            if i == 0:
+                eval_env.render()
 
 
     avg_reward /= eval_episodes
@@ -55,20 +56,20 @@ if __name__ == "__main__":
         help="OpenAI gym environment name or Forest Fire environment",
     )
     parser.add_argument(
-        "--seed", default=0, type=int, help="Sets Gym, PyTorch and Numpy seeds"
+        "--seed", default=25, type=int, help="Sets Gym, PyTorch and Numpy seeds"
     )
     parser.add_argument(
         "--start_episode",
-        default=32,
+        default=100,
         type=int,
         help="Time steps initial random policy is used",
     )
     parser.add_argument(
-        "--eval_freq", default=20, type=int, help="How often (episodes) we evaluate"
+        "--eval_freq", default=10, type=int, help="How often (episodes) we evaluate"
     )
     parser.add_argument(
         "--max_timesteps",
-        default=1e5,
+        default=1e8,
         type=int,
         help="Max time steps to run environment",
     )
@@ -78,7 +79,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--batch_size",
-        default=32,
+        default=100,
         type=int,
         help="Batch size for both actor and critic",
     )
@@ -97,10 +98,10 @@ if __name__ == "__main__":
         help="Noise added to target policy during critic update",
     )
     parser.add_argument(
-        "--noise_clip", default=0.2, help="Range to clip target policy noise"
+        "--noise_clip", default=0.5, help="Range to clip target policy noise"
     )
     parser.add_argument(
-        "--policy_freq", default=8, type=int, help="Frequency of delayed policy updates"
+        "--policy_freq", default=4, type=int, help="Frequency of delayed policy updates"
     )
     parser.add_argument(
         "--train_freq",
@@ -113,7 +114,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_model",
-        default="rothermel",
+        default="6-6",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -187,21 +188,23 @@ if __name__ == "__main__":
         episode_timesteps += 1
 
         # Select action randomly or according to policy
+
         if episode_num < args.start_episode:
             action = env.action_space.sample()
         else:
             action = (
-                policy.select_action(np.array(state))
-                + np.random.normal(0, max_action * args.expl_noise, size=action_dim)
-            ).clip(-max_action, max_action)
+                    policy.select_action(np.array(state))
+                    + np.random.normal(0, max_action * args.expl_noise, size=action_dim)
+                ).clip(-max_action, max_action)
 
         # Perform action
         next_state, reward, done, num_trees, _  = env.step(action)
-        if episode_num in range(args.start_episode+3, args.start_episode+10, 1):
+            
+        if episode_num in range(args.start_episode, args.start_episode+5, 1):
             env.render()
 
 
-        env.spec.max_episode_steps = 300
+        env.spec.max_episode_steps = 1000
         done_bool = float(done) if episode_timesteps < env.spec.max_episode_steps else 0
         # Store data in replay buffer
         replay_buffer.add(state, action, next_state, reward, done_bool)
@@ -210,7 +213,8 @@ if __name__ == "__main__":
         episode_reward += reward
 
         # Train agent after collecting sufficient data
-        if episode_num >= args.start_episode and episode_num % args.train_freq == 0:
+        if episode_num >= args.start_episode:
+        # and episode_num % args.train_freq == 0:
             policy.train(replay_buffer, args.batch_size)
 
         if done:
