@@ -13,8 +13,9 @@ GRID_SIZE = (64, 64)
 
 
 # Fuel parameters
-# boscs_bages = TimberLitterUnderstory
-boscs_bages = Chaparral
+boscs_bages = TimberLitterUnderstory
+tallgrass = TallGrass
+# boscs_bages = Chaparral
 particle = FuelParticle()
 
 w_0 = boscs_bages.w_0
@@ -28,9 +29,10 @@ S_e = particle.S_e
 p_p = particle.p_p
 
 M_f = 0.03
-U = 10.5 * 3.28084  # m/s   #usar 6 m/s
+U = 10.5 * 3.28084  # m/s   #usar 10.5 m/s
 U_dir = 0 # degrees
 max_burn_time = 384/sigma / TIME_STEP 
+
 
 
 class Forest:
@@ -56,18 +58,24 @@ class Forest:
         self.action_rect = None
 
     def reset_grid(self):
-        def init_no_fuel():
-            no_fuel_matrix = np.zeros(GRID_SIZE, dtype=bool)
-            # no_fuel_matrix[48:52, :35] = True  # Riu
-            # no_fuel_matrix[35:65, 35:40] = True #Pedra
-            no_fuel_matrix[np.random.choice([True, False], GRID_SIZE, p=[1-self.p_init_tree, self.p_init_tree])] = True
-            return no_fuel_matrix
+        def init_other_fuel():
+            w_0_array = np.full(GRID_SIZE, w_0, dtype=float)
+            delta_array = np.full(GRID_SIZE, delta, dtype=float)
+            M_x_array = np.full(GRID_SIZE, M_x, dtype=float)
+            sigma_array = np.full(GRID_SIZE, sigma, dtype=float)
+            #field is square [25,25] [39,39]
+            field = (slice(25, 39), slice(25, 39))
+            w_0_array[field] = tallgrass.w_0
+            delta_array[field] = tallgrass.delta
+            M_x_array[field] = tallgrass.M_x
+            sigma_array[field] = tallgrass.sigma
+            return w_0_array, delta_array, M_x_array, sigma_array
 
         grid = np.zeros(GRID_SIZE, dtype=[
-            ('is_burning', bool), ('burned', bool), ('no_fuel', bool), ('time_burning', float), ('ros', float)
+            ('is_burning', bool), ('burned', bool), ('no_fuel', bool), ('time_burning', float), ('ros', float), ('fuel_w_0', float), ('fuel_delta', float), ('fuel_M_x', float), ('fuel_sigma', float)
         ])
 
-        grid['no_fuel'] = init_no_fuel()
+        grid['fuel_w_0'], grid['fuel_delta'], grid['fuel_M_x'], grid['fuel_sigma'] = init_other_fuel()
         grid['time_burning'] = 0
         grid['burned'] = False
 
@@ -77,9 +85,7 @@ class Forest:
         grid['no_fuel'] = self.world == self.EMPTY_CELL
         grid['is_burning'] = self.world == self.EMPTY_CELL
         grid['is_burning'] = self.world == self.FIRE_CELL
-
         grid['burned'] = self.world == self.BURNED_CELL
-
         return grid
 
     def grid_to_world(self, new_grid):
@@ -92,14 +98,8 @@ class Forest:
 
     def update(self, grid):
         grid = self.init_grid(grid)
-        #plot grid
-        # plt.imshow(grid['no_fuel'], cmap='hot', interpolation='nearest')
-        # plt.show()
         new_grid = grid.copy()
-        
         rows, cols = GRID_SIZE
-        
-        # Precompute boundaries
         max_row, max_col = rows - 1, cols - 1
 
         for i in range(rows):
@@ -122,7 +122,7 @@ class Forest:
                                 # Si el veí no crema, ni ha cremat, i té fuel
                                 if not neighbor['is_burning'] and not neighbor['burned'] and not neighbor['no_fuel']:
                                     r = compute_rate_of_spread(
-                                        i, j, ni, nj, w_0, delta, M_x, sigma,
+                                        i, j, ni, nj, cell['fuel_w_0'], cell['fuel_delta'], cell['fuel_M_x'], cell['fuel_sigma'],
                                         h, S_T, S_e, p_p, M_f, U, U_dir
                                     )
                                     new_grid[ni,nj]['ros'] = r
@@ -134,10 +134,8 @@ class Forest:
         aimed_fire = False
         num_trees = 0
         border = False
-        num_fire = 0
         self.step_counter += 1
         burned = False
-        valid_action = True
 
         if action is not None:
             action = (action + 1) / 2  # Normalize action to [0, 1]
@@ -189,13 +187,15 @@ class Forest:
         self.step_counter = 0
 
     def render(self):
-        im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2BGR)
-        im[self.tree, 1] = 200
-        im[self.fire, 2] = 170
-        #burned cell color grey, not blue
-        im[self.burned, 0] = 105
-        im[self.burned, 1] = 105
-        im[self.burned, 2] = 105
+        im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2RGB)
+        # Set color for fuel_w_0 = 0.5 to yellow
+        
+        # Set color for trees to green
+        im[self.tree] = (80, 180, 60)
+        im[self.grid['fuel_sigma'] == tallgrass.sigma] = (0, 240, 240)
+        im[self.fire] = (0, 0, 200)
+        im[self.burned] = (105, 105, 105)
+        im[self.empty] = (0,25,60)
         if self.action_rect is not None:
             cv2.rectangle(im, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1)
         im = cv2.resize(im, (640, 640))
