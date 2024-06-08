@@ -251,16 +251,16 @@ class Forest:
         combined_image = np.hstack((im_wind_resized, im_other_resized))
 
         # Initialize video writer if not already initialized
-        # if self.video_writer is None:
-        #     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        #     self.video_writer = cv2.VideoWriter(f"anim/animation_{name}.avi", fourcc, 6.5, (combined_image.shape[1], combined_image.shape[0]))
+        if self.video_writer is None:
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            self.video_writer = cv2.VideoWriter(f"anim/animation_{name}.avi", fourcc, 6.5, (combined_image.shape[1], combined_image.shape[0]))
 
         # # # # Write the current frame to the video
-        # self.video_writer.write(combined_image)
+        self.video_writer.write(combined_image)
         
         # Display the combined image (optional)
-        cv2.imshow("Forest", combined_image)
-        cv2.waitKey(1000//200)
+        # cv2.imshow("Forest", combined_image)
+        # cv2.waitKey(1000//200)
 
 
 if __name__ == "__main__":

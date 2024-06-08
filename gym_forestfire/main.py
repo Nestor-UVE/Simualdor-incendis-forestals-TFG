@@ -17,7 +17,7 @@ import gym_forestfire.agents.td3 as td3
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_name, seed, eval_episodes=3):
+def eval_policy(policy, env_name, seed, num, eval_episodes=3):
     eval_env = gym.make(env_name)
     eval_env.seed(seed + 100)
 
@@ -30,7 +30,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=3):
             state, reward, done, _ , _ = eval_env.step(action)
             avg_reward += reward
             if i == 0:
-                eval_env.render(i)
+                eval_env.render(num)
 
 
     avg_reward /= eval_episodes
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_model",
-        default="7-6",
+        default="9-6",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -200,8 +200,8 @@ if __name__ == "__main__":
         # Perform action
         next_state, reward, done, num_trees, _  = env.step(action)
             
-        if episode_num in range(args.start_episode, args.start_episode+100, 10):
-            env.render(episode_num)
+        # if episode_num in range(args.start_episode, args.start_episode+100, 10):
+        #     env.render(episode_num)
 
 
         env.spec.max_episode_steps = 1000
@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
         # Evaluate episode
         if (episode_num + 1) % args.eval_freq == 0 and episode_num > args.start_episode:
-            evaluations = (eval_policy(policy, args.env, args.seed))
+            evaluations = (eval_policy(policy, args.env, args.seed, episode_num))
             with open(f"./results/{args.load_model}.txt", "a") as f:
                 f.write(f"Evaluation: {evaluations}\n")
             evaluations = []
