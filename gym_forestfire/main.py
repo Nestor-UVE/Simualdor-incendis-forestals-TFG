@@ -30,7 +30,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=3):
             state, reward, done, _ , _ = eval_env.step(action)
             avg_reward += reward
             if i == 0:
-                eval_env.render()
+                eval_env.render(i)
 
 
     avg_reward /= eval_episodes
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--load_model",
-        default="6-6",
+        default="7-6",
         help='Model load file name, "" doesn\'t load, "default" uses file_name',
     )
     parser.add_argument("--exp_name", default="test", help="Exp name for file names.")
@@ -200,8 +200,8 @@ if __name__ == "__main__":
         # Perform action
         next_state, reward, done, num_trees, _  = env.step(action)
             
-        if episode_num in range(args.start_episode, args.start_episode+5, 1):
-            env.render()
+        if episode_num in range(args.start_episode, args.start_episode+100, 10):
+            env.render(episode_num)
 
 
         env.spec.max_episode_steps = 1000

@@ -3,6 +3,7 @@ import cv2
 import time
 from gym_forestfire.envs.presets import *
 from gym_forestfire.envs.ros import compute_rate_of_spread
+from gym_forestfire.envs.vent2 import Vent2
 
 import matplotlib.pyplot as plt
 
@@ -14,7 +15,7 @@ GRID_SIZE = (64, 64)
 
 # Fuel parameters
 boscs_bages = TimberLitterUnderstory
-tallgrass = TallGrass
+tallgrass = Chaparral
 # boscs_bages = Chaparral
 particle = FuelParticle()
 
@@ -29,8 +30,8 @@ S_e = particle.S_e
 p_p = particle.p_p
 
 M_f = 0.03
-U = 10.5 * 3.28084  # m/s   #usar 10.5 m/s
-U_dir = 0 # degrees
+# U = 10.5 * 3.28084  # m/s   #usar 10.5 m/s
+# U_dir = 0 # degrees
 max_burn_time = 384/sigma / TIME_STEP 
 
 
@@ -46,7 +47,7 @@ class Forest:
         self.p_init_tree = init_tree
         self.extinguisher_ratio = extinguisher_ratio
         self.world_size = world_size
-
+        
         # Initialize grid
         full_size = tuple(i + 2 for i in world_size)
         self.full = np.zeros(full_size, dtype=np.uint8)
@@ -56,6 +57,11 @@ class Forest:
         self.sum_over = tuple(-(i + 1) for i in range(self.n_dims))
         self.step_counter = 0
         self.action_rect = None
+        self.seed = np.random.randint(-5, 5,2)
+        self.mean_U = 0
+        self.video_writer = None
+        self.vent = Vent2(self.seed)
+        
 
     def reset_grid(self):
         def init_other_fuel():
@@ -63,21 +69,23 @@ class Forest:
             delta_array = np.full(GRID_SIZE, delta, dtype=float)
             M_x_array = np.full(GRID_SIZE, M_x, dtype=float)
             sigma_array = np.full(GRID_SIZE, sigma, dtype=float)
-            #field is square [25,25] [39,39]
+            # field is square [25,25] [39,39]
             field = (slice(25, 39), slice(25, 39))
-            w_0_array[field] = tallgrass.w_0
-            delta_array[field] = tallgrass.delta
-            M_x_array[field] = tallgrass.M_x
-            sigma_array[field] = tallgrass.sigma
+            # w_0_array[field] = tallgrass.w_0
+            # delta_array[field] = tallgrass.delta
+            # M_x_array[field] = tallgrass.M_x
+            # sigma_array[field] = tallgrass.sigma
             return w_0_array, delta_array, M_x_array, sigma_array
+        
 
         grid = np.zeros(GRID_SIZE, dtype=[
-            ('is_burning', bool), ('burned', bool), ('no_fuel', bool), ('time_burning', float), ('ros', float), ('fuel_w_0', float), ('fuel_delta', float), ('fuel_M_x', float), ('fuel_sigma', float)
+            ('is_burning', bool), ('burned', bool), ('no_fuel', bool), ('time_burning', float), ('ros', float), ('fuel_w_0', float), ('fuel_delta', float), ('fuel_M_x', float), ('fuel_sigma', float), ('U', float), ('U_dir', float)
         ])
-
         grid['fuel_w_0'], grid['fuel_delta'], grid['fuel_M_x'], grid['fuel_sigma'] = init_other_fuel()
         grid['time_burning'] = 0
         grid['burned'] = False
+        self.seed = np.random.randint(-5, 5, 2)
+        grid['U'], grid['U_dir'] = self.vent.reset(self.seed)
 
         return grid
 
@@ -102,6 +110,9 @@ class Forest:
         rows, cols = GRID_SIZE
         max_row, max_col = rows - 1, cols - 1
 
+        #update values of wind U and U_dir makeing a simple simulation of wind, it will change the direction and speed of the wind
+        
+
         for i in range(rows):
             for j in range(cols):
                 cell = grid[i, j]
@@ -123,7 +134,7 @@ class Forest:
                                 if not neighbor['is_burning'] and not neighbor['burned'] and not neighbor['no_fuel']:
                                     r = compute_rate_of_spread(
                                         i, j, ni, nj, cell['fuel_w_0'], cell['fuel_delta'], cell['fuel_M_x'], cell['fuel_sigma'],
-                                        h, S_T, S_e, p_p, M_f, U, U_dir
+                                        h, S_T, S_e, p_p, M_f, cell['U'], cell['U_dir']
                                     )
                                     new_grid[ni,nj]['ros'] = r
                                     new_grid[ni,nj]['is_burning'] = True
@@ -136,7 +147,7 @@ class Forest:
         border = False
         self.step_counter += 1
         burned = False
-
+        done = False
         if action is not None:
             action = (action + 1) / 2  # Normalize action to [0, 1]
             x, y = int(self.world.shape[1] * action[1]), int(self.world.shape[0] * action[0])
@@ -160,7 +171,14 @@ class Forest:
         self.tree = self.world == self.TREE_CELL
         self.empty = self.world == self.EMPTY_CELL
         self.burned = self.world == self.BURNED_CELL
-
+        if (
+            np.any(self.fire[0]) 
+            or np.any(self.fire[-1]) 
+            or np.any(self.fire[:, 0]) 
+            or np.any(self.fire[:, -1])
+        ):
+            
+            done = True
         is_fire = np.any(self.fire)
 
         if not is_fire:
@@ -174,52 +192,90 @@ class Forest:
             self.grid['ros'] = 1000
 
         if is_fire:
+            if self.step_counter % 30 == 0:
+                self.grid['U'], self.grid['U_dir'], self.mean_U = self.vent.step(self.seed)
             self.grid = self.update(self.grid)
 
         #fire_cells counts the number of burning cells in the grid
         fire_cells = np.sum(self.fire)
 
-        return aimed_fire, is_fire, num_trees, border, fire_cells, burned
+        return aimed_fire, is_fire, num_trees, border, fire_cells, burned, done
 
     def reset(self):
         self.grid = self.reset_grid()
         self.grid_to_world(self.grid)
         self.step_counter = 0
+        self.seed = np.random.randint(-5, 5, 2)
+        self.grid['U'], self.grid['U_dir'], self.mean_U = self.vent.step(self.seed)
+        self.video_writer = None
+  
 
-    def render(self):
-        im = cv2.cvtColor(self.world, cv2.COLOR_GRAY2RGB)
-        # Set color for fuel_w_0 = 0.5 to yellow
+
+
+    def render(self, name):
+        # Create two separate images for wind values and other values
+        im_other = cv2.cvtColor(self.world, cv2.COLOR_GRAY2RGB)
         
+        # Set color for fuel_w_0 = 0.5 to yellow
         # Set color for trees to green
-        im[self.tree] = (80, 180, 60)
-        im[self.grid['fuel_sigma'] == tallgrass.sigma] = (0, 240, 240)
-        im[self.fire] = (0, 0, 200)
-        im[self.burned] = (105, 105, 105)
-        im[self.empty] = (0,25,60)
+        im_other[self.tree] = (80, 180, 60)
+        im_other[self.grid['fuel_sigma'] == tallgrass.sigma] = (0, 240, 240)
+        im_other[self.fire] = (0, 0, 200)
+        im_other[self.burned] = (105, 105, 105)
+        im_other[self.empty] = (0, 25, 60)
         if self.action_rect is not None:
-            cv2.rectangle(im, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1)
-        im = cv2.resize(im, (640, 640))
-        cv2.imshow("Forest", im)
-        cv2.waitKey(50)
+            cv2.rectangle(im_other, self.action_rect[0], self.action_rect[1], (255, 255, 255), 1)
+        
+        # Generate wind vectors
+        X, Y = np.meshgrid(np.arange(64), np.arange(64))
+        U = self.grid['U']
+        U_dir = self.grid['U_dir']
+        U_x = U * np.cos(np.radians(U_dir))
+        U_y = U * np.sin(np.radians(U_dir))
+        
+        # Plot wind vectors using quiver plot
+        plt.figure(figsize=(10, 10))
+        plt.quiver(X, Y, U_x, U_y, angles='xy', scale = 2000)
+        plt.text(0.9, 0.96, f"Velocitat mitja del vent: {self.mean_U*0.911:.2f} km/h ", color='black', fontsize=18, ha='right', va='top', transform=plt.gcf().transFigure)
+
+        plt.savefig("quiver_plot.png")
+        plt.close()  # Close the plot to prevent displaying it
+
+        # self.vent.plot(self.grid['U'], self.mean_U)
+        
+        im_wind = cv2.imread("quiver_plot.png")
+        im_wind = cv2.cvtColor(im_wind, cv2.COLOR_BGR2RGB)
+        im_wind_resized = cv2.resize(im_wind, (640, 640))
+        im_other_resized = cv2.resize(im_other, (640, 640))
+
+        combined_image = np.hstack((im_wind_resized, im_other_resized))
+
+        # Initialize video writer if not already initialized
+        # if self.video_writer is None:
+        #     fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        #     self.video_writer = cv2.VideoWriter(f"anim/animation_{name}.avi", fourcc, 6.5, (combined_image.shape[1], combined_image.shape[0]))
+
+        # # # # Write the current frame to the video
+        # self.video_writer.write(combined_image)
+        
+        # Display the combined image (optional)
+        cv2.imshow("Forest", combined_image)
+        cv2.waitKey(1000//200)
 
 
 if __name__ == "__main__":
     forest = Forest(world_size=(64, 64))
     forest.reset()  
-    total_time = 0
-    n_steps = 1000
-    average = 10
-    for _ in range(average):
-        start = time.time()
+    n_steps = 1800
+    for number in range(10):
+        print(f'Number {number}')
         for i in range(n_steps):
-            forest.step()
-            forest.render()
+            _, _, _, _, _, _, done = forest.step()
+            if done:
+                break
+            if i % 20 == 0 or i == 0:
+                forest.render(number)
             print(f'Step {i}')
         forest.reset()
 
-        end = time.time()
-        elapsed_time = end - start
-        total_time += elapsed_time
 
-    average_time = total_time / average
-    print(f'Average elapsed time: {average_time}', 0.306)

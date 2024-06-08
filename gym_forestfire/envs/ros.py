@@ -42,8 +42,8 @@ def compute_rate_of_spread(
     Returns:
         R: The computed rate of spread in ft/min
     """
-    
 
+    
     eta_S = 0.174 * S_e**-0.19
     r_M = M_f / M_x
     eta_M = 1 - 2.59 * r_M + 5.11 * r_M**2 - 3.52 * r_M**3
@@ -62,7 +62,7 @@ def compute_rate_of_spread(
 
     angle_of_travel = np.arctan2(loc_y - new_loc_y, new_loc_x - loc_x)
 
-    wind_angle_radians = np.radians(90 - U_dir)
+    wind_angle_radians = np.radians(-U_dir -90)
     U = U * np.cos(wind_angle_radians - angle_of_travel)
     
     phi_w = c * np.sign(U) * (np.abs(U))**b * (B / B_op) ** -e

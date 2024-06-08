@@ -17,7 +17,7 @@ from gym_forestfire.envs.forest import Forest
 
 STATE_W = 64
 STATE_H = 64
-T_HORIZON = 1000
+T_HORIZON = 1800
 
 
 class ForestFireEnv(gym.Env):
@@ -37,10 +37,12 @@ class ForestFireEnv(gym.Env):
         self._max_episode_steps = T_HORIZON
 
     def step(self, action):
-        aimed_fire, is_fire, num_trees, border, fire_cells, burned = self.forest.step(action)
+        aimed_fire, is_fire, num_trees, border, fire_cells, burned, _ = self.forest.step(action)
         self.t += 1
         step_reward = 0
         done = bool(self.t > T_HORIZON or not is_fire)
+        #if any fire is in a border then done
+        
         # reward calculation
         # # if the action has been aimed at fire: add 1 to the reward
         if aimed_fire:
@@ -120,8 +122,8 @@ class ForestFireEnv(gym.Env):
 
         return self.step(None)[0]
 
-    def render(self, mode="human"):
-        self.forest.render()
+    def render(self, name, mode="human"):
+        self.forest.render(name)
 
     def close(self):
         cv2.destroyAllWindows()
