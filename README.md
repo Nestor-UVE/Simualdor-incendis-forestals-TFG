@@ -2,3 +2,6 @@ Codi usat per al desenvolupament del TFG Models de propagació d’incendis fore
 Per Néstor Bravo Egea
 Supervisat per Gemma Sanjuan Gomez 
 Any 2023/2024 
+
+
+![Animation](./anim/Exit3.avi)
