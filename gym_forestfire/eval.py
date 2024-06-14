@@ -18,13 +18,13 @@ def eval_policy(policy, env_name, seed, eval_episodes):
     sum_trees = 0
     exit = 0
     
-    for i in range(eval_episodes):
+    for i in range(0, eval_episodes, 1):
         state, done = eval_env.reset(), False
         step= 0
         while not done:
-            action = policy.select_action(np.array(state))
+            # action = policy.select_action(np.array(state))
             # action = np.random.uniform(-1, 1, 5)
-            # action = None
+            action = None
             state, reward, done, num_trees, _ = eval_env.step(action)
             avg_reward += reward
             step += 1
@@ -34,8 +34,8 @@ def eval_policy(policy, env_name, seed, eval_episodes):
                 print(i, num_trees)
                 if num_trees >= 0.8 * 4096:
                     exit += 1
-            if (step ==0 or step % 20 == 0) and i % 1 == 0:
-                eval_env.render(i)
+            # if (step ==0 or step % 20 == 0) and i % 1 == 0:
+            #     eval_env.render(i)
             
             
 

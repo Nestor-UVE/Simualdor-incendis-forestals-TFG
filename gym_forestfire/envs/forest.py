@@ -31,7 +31,7 @@ p_p = particle.p_p
 
 M_f = 0.03
 # U = 10.5 * 3.28084  # m/s   #usar 10.5 m/s
-# U_dir = 0 # degrees
+# U_dir = 180 # degrees
 max_burn_time = 384/sigma / TIME_STEP 
 
 
@@ -70,7 +70,7 @@ class Forest:
             M_x_array = np.full(GRID_SIZE, M_x, dtype=float)
             sigma_array = np.full(GRID_SIZE, sigma, dtype=float)
             # field is square [25,25] [39,39]
-            field = (slice(25, 39), slice(25, 39))
+            # field = (slice(25, 39), slice(25, 39))
             # w_0_array[field] = tallgrass.w_0
             # delta_array[field] = tallgrass.delta
             # M_x_array[field] = tallgrass.M_x
@@ -136,6 +136,7 @@ class Forest:
                                         i, j, ni, nj, cell['fuel_w_0'], cell['fuel_delta'], cell['fuel_M_x'], cell['fuel_sigma'],
                                         h, S_T, S_e, p_p, M_f, cell['U'], cell['U_dir']
                                     )
+                                    
                                     new_grid[ni,nj]['ros'] = r
                                     new_grid[ni,nj]['is_burning'] = True
         self.grid_to_world(new_grid)
@@ -183,10 +184,10 @@ class Forest:
 
         if not is_fire:
 
-            # start_point = self.world.shape[0] // 2, self.world.shape[1] // 2
+            start_point = self.world.shape[0] // 2, self.world.shape[1] // 2
             # start_point = np.random.randint(0, self.world.shape[0]), np.random.randint(0, self.world.shape[1])
             #start point is somewhere within [20,20] [44,44]
-            start_point = np.random.randint(20, 44), np.random.randint(20, 44)
+            # start_point = np.random.randint(20, 44), np.random.randint(20, 44)
             self.world[start_point] = self.FIRE_CELL
             self.grid['is_burning'][start_point] = True
             self.grid['ros'] = 1000
@@ -274,8 +275,8 @@ if __name__ == "__main__":
             if done:
                 break
             if i % 20 == 0 or i == 0:
-                forest.render(number)
-            print(f'Step {i}')
+                forest.render(f"{number}_si")
+            # print(f'Step {i}')
         forest.reset()
 
 
